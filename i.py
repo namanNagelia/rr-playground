@@ -1,69 +1,128 @@
-# Code
-import streamlit as st
+"""Streamlit dashboard for the airplane strikes dataset."""
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
-
-df = pd.read_csv(
-    'https://raw.githubusercontent.com/namanNagelia/airplaneDataAnalysis/main/Airplane%20Strikes%20Dataset.csv')
-pd.set_option('display.max_columns', None)
-year_counts = df.groupby("Incident Year").size(
-).reset_index(name="Incident Count")
-state_incidents = df.groupby("State").size().reset_index(name="Incident Count")
-species_incidents = df.groupby(
-    "Species Name").size().reset_index(name="Incident Count")
-Flight_Phase = df.groupby("Flight Phase").size(
-).reset_index(name="Incident Count")
-
-df2 = pd.DataFrame()
-
-for i in range(37, len(df.columns)):
-    column_name = df.columns[i]
-    df2[column_name] = df[column_name]
-
-df2 = df2.sum()
-series = df2.squeeze()
-total_sum = series.sum()
-percentages = (series / total_sum) * 100
-percentage_df = pd.DataFrame(
-    {'Damage Type': percentages.index, '%': percentages.values})
-print(percentage_df)
+import streamlit as st
 
 
-pd.set_option('display.max_columns', None)
-# Print the DataFrame
-
-fig = px.line(year_counts, x="Incident Year", y="Incident Count",
-              title="Incidents per Year", line_shape='linear')
-fig_state = px.bar(state_incidents, x="State",
-                   y="Incident Count", title="Incidents Per State")
-fig_state_map = px.scatter_geo(state_incidents,
-                               locations="State",
-                               locationmode="USA-states",
-                               color="Incident Count",
-                               hover_name="State",
-                               title="Incidents Per State (Map)",
-                               scope="usa", color_continuous_scale=['#87CEFA', 'darkred']
-                               )
-
-# Customize the map layout
-fig_state_map.update_geos(
-    showland=True, landcolor="rgb(245, 245, 245)",
-    showsubunits=True, subunitcolor="rgb(200, 200, 200)",
-    countrycolor="rgb(200, 200, 200)",
-    showlakes=True, lakecolor="rgb(255, 255, 255)",
-)
+DATA_FILE = Path(__file__).resolve().parent / "Airplane Strikes Dataset.csv"
+DAMAGE_COLUMN_START = 37
 
 
-fig_species = px.bar(species_incidents, x="Species Name",
-                     y="Incident Count", title="Incidents per Species")
-fig_Phase = px.bar(Flight_Phase, x="Flight Phase",
-                   y="Incident Count", title="Incidents per phase of flight")
-fig_damage = px.bar(percentage_df, x="Damage Type", y="%",
-                    title="Percentage of Incidents")
-st.title("Raymond Yang Data Analysis")
-st.plotly_chart(fig)
-st.plotly_chart(fig_state)
-st.plotly_chart(fig_state_map)
-st.plotly_chart(fig_species)
-st.plotly_chart(fig_Phase)
-st.plotly_chart(fig_damage)
+def load_data(path=DATA_FILE):
+    """Load the checked-in airplane strikes CSV (or a supplied CSV path)."""
+    return pd.read_csv(path)
+
+
+def count_incidents(data, column):
+    """Return incident counts grouped by *column*."""
+    return data.groupby(column).size().reset_index(name="Incident Count")
+
+
+def aggregate_incidents(data):
+    """Calculate the incident counts used by the dashboard charts."""
+    return {
+        "year": count_incidents(data, "Incident Year"),
+        "state": count_incidents(data, "State"),
+        "species": count_incidents(data, "Species Name"),
+        "flight_phase": count_incidents(data, "Flight Phase"),
+    }
+
+
+def calculate_damage_percentages(data):
+    """Calculate the percentage share of each strike/damage field."""
+    damage_totals = data.iloc[:, DAMAGE_COLUMN_START:].sum()
+    total = damage_totals.sum()
+    percentages = damage_totals / total * 100
+    return pd.DataFrame(
+        {"Damage Type": percentages.index, "%": percentages.values}
+    )
+
+
+def create_charts(aggregates, damage_percentages):
+    """Build and return the dashboard's Plotly figures."""
+    year_counts = aggregates["year"]
+    state_incidents = aggregates["state"]
+    species_incidents = aggregates["species"]
+    flight_phase_incidents = aggregates["flight_phase"]
+
+    yearly_chart = px.line(
+        year_counts,
+        x="Incident Year",
+        y="Incident Count",
+        title="Incidents per Year",
+        line_shape="linear",
+    )
+    state_chart = px.bar(
+        state_incidents,
+        x="State",
+        y="Incident Count",
+        title="Incidents Per State",
+    )
+    state_map = px.scatter_geo(
+        state_incidents,
+        locations="State",
+        locationmode="USA-states",
+        color="Incident Count",
+        hover_name="State",
+        title="Incidents Per State (Map)",
+        scope="usa",
+        color_continuous_scale=["#87CEFA", "darkred"],
+    )
+    state_map.update_geos(
+        showland=True,
+        landcolor="rgb(245, 245, 245)",
+        showsubunits=True,
+        subunitcolor="rgb(200, 200, 200)",
+        countrycolor="rgb(200, 200, 200)",
+        showlakes=True,
+        lakecolor="rgb(255, 255, 255)",
+    )
+
+    species_chart = px.bar(
+        species_incidents,
+        x="Species Name",
+        y="Incident Count",
+        title="Incidents per Species",
+    )
+    flight_phase_chart = px.bar(
+        flight_phase_incidents,
+        x="Flight Phase",
+        y="Incident Count",
+        title="Incidents per phase of flight",
+    )
+    damage_chart = px.bar(
+        damage_percentages,
+        x="Damage Type",
+        y="%",
+        title="Percentage of Incidents",
+    )
+    return (
+        yearly_chart,
+        state_chart,
+        state_map,
+        species_chart,
+        flight_phase_chart,
+        damage_chart,
+    )
+
+
+def render_dashboard(charts):
+    """Render the dashboard title and its Plotly charts in order."""
+    st.title("Raymond Yang Data Analysis")
+    for chart in charts:
+        st.plotly_chart(chart)
+
+
+def main():
+    """Load, analyze, and render the airplane strikes dashboard."""
+    data = load_data()
+    aggregates = aggregate_incidents(data)
+    damage_percentages = calculate_damage_percentages(data)
+    charts = create_charts(aggregates, damage_percentages)
+    render_dashboard(charts)
+
+
+if __name__ == "__main__":
+    main()
